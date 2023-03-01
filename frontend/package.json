@@ -1,0 +1,11 @@
+{
+  "name": "music-quiz-frontend",
+  "version": "0.0.1",
+  "main": "index.js",
+  "author": "vertiKarl",
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}

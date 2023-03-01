@@ -1,0 +1,17 @@
+{
+    "extends": "@tsconfig/node16/tsconfig.json",
+
+    "compilerOptions": {
+        "module": "ESNext",
+        "target": "ES6",
+        "moduleResolution": "nodenext",
+        "noImplicitAny": true,
+        "resolveJsonModule": true,
+        "esModuleInterop": true
+    },
+    "ts-node": {
+        "esm": true
+    },
+    "lib": ["ESNext"],
+    "exclude": ["node_modules"]
+}

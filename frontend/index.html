@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<style>
+    body {
+        background-color: black;
+        color: white;
+    }
+
+    #chat {
+        height: 200px;
+        scroll-behavior: auto;
+    }
+</style>
+
+<body>
+    <audio id="stream"></audio>
+    <button id="ping" type="button" onclick="handleKey(this)">Ping</button>
+    <input id="changename" type="text", onkeydown="handleKey(this)">
+    <ul id="chat">
+        Chat: <input id="prompt" type="text" onkeydown="handleKey(this)">
+    </ul>
+</body>
+<script>
+    const socket = new WebSocket("ws://127.0.0.1:8080");
+    const audioElement = document.getElementById("stream");
+
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = audioCtx.createBuffer(2, audioCtx.sampleRate * 5, audioCtx.sampleRate);
+    const buffer = arrayBuffer.getChannelData(channel);
+
+    function decodeAudio(buffer) {
+        arrayBuffer.push(buffer);
+    }
+
+    const chat = document.getElementById('chat')
+
+    function handleKey(ele) {
+        if(ele.id === 'ping') {
+            console.log("PING")
+            socket.send(JSON.stringify({'type': 'PING'}))
+        }
+
+        if(event.key === 'Enter') {
+            switch(ele.id) {
+                case "prompt":
+                    sendMessage(ele.value)
+                    ele.value = ""
+                    break;
+                case "changename":
+                    changeName(ele.value)
+                    ele.value = ""
+                    break;
+            }
+        }
+    }
+
+    socket.onopen = (ev => {
+        console.log("Connection established!")
+    })
+
+    socket.onmessage = ((msg) => {
+        const data = msg.data
+        const message = JSON.parse(data);
+        console.log(message)
+        const p = document.createElement('p');
+        let content = ''
+
+        switch(message.type) {
+            case "MSG": {
+                p.innerHTML = `${message.user.name ? message.user.name : message.id}: ${message.content}`;
+                break;
+            }
+            case "PING": {
+                p.innerHTML = `SYSTEM: Ping ${new Date().getTime() - message.MS}`;
+                break;
+            }
+            case "AUD": {
+                if(sampleRate != message.stat.bit_rate) arrayBuffer = audioCtx.createBuffer(2, message.stat.bit_rate * 5, message.stat.bit_rate);
+                
+                decodeAudio(message.content)
+                break;
+            }
+        }
+    
+        chat.append(p);
+    })
+
+    function changeName(content) {
+        const data = JSON.stringify(
+            {
+                type: "CHN",
+                content: content
+            }
+        )
+        socket.send(data)
+
+    }
+
+    function sendMessage(content) {
+
+        const data = JSON.stringify(
+            {
+                type: "MSG",
+                content: content
+            }
+        )
+        socket.send(data)
+
+    }
+</script>
+</html>
