@@ -19,7 +19,7 @@ export class Lobby {
     constructor(public id: string) {
         this.systemUser = new User(`Lobby${this.id}`, this.id);
 
-        this.startRound();
+        //this.startRound();
 
         // setInterval(() => {
         //     this.startRound();
@@ -27,7 +27,6 @@ export class Lobby {
     }
 
     broadcast(message: SocketMessage) {
-        console.log("Test")
         Lobby.controller.broadcast(Array.from(this.players.values()), message)
     }
     
@@ -47,7 +46,7 @@ export class Lobby {
         }
         
 
-        const message: SocketMessage = {type: 'MSG', user: this.systemUser, content: `Round ${this.round} starting!`}
+        const message: SocketMessage = {type: 'MSG', user: this.systemUser, content: `Round ${this.round} starting!`, isBroadcast: true}
         this.broadcast(message)
 
         this.streamer.stream
@@ -64,7 +63,7 @@ export class Lobby {
     };
 
     endRound() {
-        this.broadcast({type: 'MSG', user: this.systemUser, content: `Round ${this.round} ended`});
+        this.broadcast({type: 'MSG', user: this.systemUser, content: `Round ${this.round} ended`, isBroadcast: true});
         LobbyStatus.IDLE;
         this.round++;
     }

@@ -1,6 +1,13 @@
+:root {
+  --text-primary: white;
+  --bg-primary: black;
+}
+
 .navbar {
   width: 100%;
   height: 6rem;
+  background-color: rgba(0, 0,0, 0.7);
+  backdrop-filter: blur(5rem);
   display: flex;
   flex-direction: row;
   justify-content: start;
@@ -14,14 +21,38 @@
   height: 100%;
 }
 
+.hidden {
+  height: 0;
+  width: 0;
+  visibility: hidden;
+}
+
+.inline {
+  display: flex;
+  gap: 10px;
+}
+
+ul {
+  list-style-type: none;
+}
+
 .Page {
-  width: 100%;
+  width: 80%;
   height: 100%;
+  padding: 10% 10% 0;
   flex: 0 1 auto;
 }
 
-.Chat {
+.UserList {
   height: 15vh;
+  min-height: 300px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  overflow-y: scroll;
+}
+
+.Chat {
+  height: 50vh;
   display: flex;
   flex-direction: column-reverse;
 }
@@ -29,6 +60,25 @@
 .ChatInput {
   width: 100%;
   height: 2rem;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ChatLog {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(0.5rem);
+  color: var(--text-primary);
+  margin: 0;
+  padding: 0;
+  border: 2px solid red;
+  width: 100%;
+  height: 100%;
+  overflow-y: scroll;
+}
+
+p {
+  color: var(--text-primary);
 }
 
 .App {
