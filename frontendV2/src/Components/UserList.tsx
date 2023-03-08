@@ -1,9 +1,5 @@
 import React from "react";
-
-interface User {
-    name: string,
-    id: string
-}
+import User from "./interfaces/User";
 
 export class UserList extends React.Component<{users: User[]}> {
     state: { users: User[] };
@@ -23,16 +19,17 @@ export class UserList extends React.Component<{users: User[]}> {
     }
 
     render() {
-        console.log("UPDATING USERLIST")
         const users = []
 
         for(const i in this.state.users) {
+            const u = this.state.users[i]
             //console.log("USER: ",this.state.users[i]);
-            users.push(<p key={i}>{this.state.users[i].name}</p>)
+            users.push(<p key={i}>{u.username}{u.score ? `: ${u.score}` : ''}</p>)
         }
 
         return (
-            <div className="UserList">
+            <div className="UserList component">
+                Users ({users.length}):
                 {users}
             </div>
         )

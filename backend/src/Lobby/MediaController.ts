@@ -6,32 +6,35 @@ import ffprobe, { FFProbeResult } from "ffprobe";
 import ffprobeStatic from "ffprobe-static";
 
 export class MediaController {
-    currentSong: Song | null = null;
-    queue: Song[] = [];
-    lastStat: FFProbeResult | null = null;
-    
-    stream: Writable = new Writable({
-        write(chunk: any, encoding, callback) {
+  currentSong: Song | null = null;
+  queue: Song[] = [];
+  length = 0;
+  lastStat: FFProbeResult | null = null;
+  sample_rate: number = 48000;
 
-        }
+  stream: Writable = new Writable({
+    write(chunk: any, encoding, callback) {},
+  });
+
+  async playSong(path: string): Promise<Buffer> {
+    return new Promise(async (resolve, reject) => {
+      const info = await ffprobe(path, {
+        path: ffprobeStatic.path,
+      });
+
+      this.lastStat = info;
+      this.sample_rate = info.streams[0].sample_rate ??= 48000;
+      this.length = info.streams[0].duration ??= 0;
+
+      resolve(fs.readFileSync(path));
+
+      //   console.log(this.sample_rate);
+      //   const throttle = new Throttle({
+      //     bps: this.sample_rate,
+      //     chunkSize: this.sample_rate * 8,
+      //   });
+
+      //   resolve(fs.createReadStream(path).pipe(throttle));
     });
-    
-    async playSong(path: string): Promise<Throttle | null> {
-        return new Promise(async (resolve, reject) => {
-            const info = await ffprobe(path, {
-                path: ffprobeStatic.path
-            })
-
-            this.lastStat = info;
-    
-            const bitRate = info.streams[0].bit_rate ??= 128000;
-            console.log(bitRate)
-            const throttle = new Throttle(bitRate / 8);
-    
-            resolve(fs.createReadStream(path).pipe(throttle))
-            // .on("data", (chunk) => {
-            //     this.stream.write(chunk);
-            // })
-        })
-    }
+  }
 }

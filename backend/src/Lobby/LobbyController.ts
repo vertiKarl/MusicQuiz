@@ -3,142 +3,167 @@ import { MediaController } from "./MediaController.js";
 import { v4 as uuid } from "uuid";
 import { User } from "../User/User.js";
 import http from "http";
-import WebSocket, { WebSocketServer } from "ws";
+import { Server as WebSocketServer, Socket } from "socket.io";
 import express from "express";
 import { Lobby } from "./Lobby.js";
 import { Config } from "../config.js";
 import { Database } from "../Database/DatabaseController.js";
 import { Writable } from "stream";
 import { FFProbeResult } from "ffprobe";
+import { UserRecord } from "../Database/UserRecord.js";
+import LobbyOptions from "./LobbyOptions.js";
+import { RecordAuthResponse } from "pocketbase";
+import Message from "./Message.js";
 
-export interface UserSocket extends WebSocket {
-    id: string,
-    lobbyId: string,
-    user: User,
-    sink: Writable
+const defaultLobbySettings: LobbyOptions = {
+  MAX_PLAYERS: 8,
+  ROUND_TIME: 60 * 1000,
+  ALLOWED: ["anime", "artist", "game", "title", "year"],
+};
+
+export interface UserSocket {
+  lobby: Lobby;
+  user: User;
+  socket: Socket;
 }
+
+type Events =
+  | "MESSAGE"
+  | "CHANGE_NAME"
+  | "PING"
+  | "AUDIO_BUFFER"
+  | "USER_JOIN"
+  | "USER_LIST"
+  | "USER_LEAVE"
+  | "SOCKET_ID";
 
 export interface SocketMessage {
-    type: 'MSG' | 'CHN' | 'PING' | 'AUD' | 'UserJoin' | 'UserList' | 'UserLeave',
-    content?: string,
-    stat?: FFProbeResult | null,
-    user: User,
-    userList?: User[],
-    isBroadcast: boolean
+  type: Events;
+  content?: string;
+  stat?: FFProbeResult | null;
+  user?: User;
+  userList?: User[];
+  isBroadcast: boolean;
 }
 
-const defaultLobbies = ["test"]
+const defaultLobbies = ["test"];
+const LOGIN_TRIES = 3;
 
-export class LobbyController {
-    //sockets: Map<string, UserSocket[]> = new Map();
-    lobbies: Map<string, Lobby> = new Map();
-    db: Database;
-    wss: WebSocketServer;
+export class LobbyController extends WebSocketServer {
+  //sockets: Map<string, UserSocket[]> = new Map();
+  lobbies: Map<string, Lobby> = new Map();
+  db: Database;
+  //wss: WebSocketServer;
 
-    systemUser: User = new User("SYSTEM", "0");
+  constructor(CONFIG: Config) {
+    const app = express();
+    const server = http.createServer(app);
 
-    constructor(CONFIG: Config) {
-        const app = express();
-        const server = http.createServer(app);
-        
-        this.wss = new WebSocketServer({ server });
+    super(server);
 
-        this.db = new Database(CONFIG.DATABASE_URL);
-        const _this = this;
-        Lobby.controller = this;
+    //this.wss = new WebSocketServer({ server });
 
-        defaultLobbies.forEach(id => {
-            this.lobbies.set(id, new Lobby(id));
-        })
+    this.db = new Database(CONFIG.DATABASE_URL, CONFIG.SALT_ROUNDS);
+    const _this = this;
+    Lobby.controller = this;
 
-        this.wss.on('connection', (ws: UserSocket): void => {
-            
-            ws.id = uuid();
-            ws.user = new User(ws.id, ws.id); // TODO: Check Login
-            ws.lobbyId = "test";
-            
-            console.log(ws.user.name + " joined!")
-            // Announce User in Lobby
+    defaultLobbies.forEach((id) => {
+      this.lobbies.set(id, new Lobby(id, defaultLobbySettings));
+    });
 
-            
-            if(!this.lobbies.get(ws.lobbyId)) this.lobbies.set(ws.lobbyId, new Lobby(ws.lobbyId));
-            
-            // const socket = new UserSocket(ws, lobbyID, user);
-            this.broadcast(Array.from(this.lobbies.get(ws.lobbyId)!.players.values()), {
-                type: "UserJoin",
-                user: ws.user,
-                isBroadcast: true
-            })
-            
-            this.lobbies.get(ws.lobbyId)!.players.set(ws.id, ws);
+    this.on("connection", (socket: Socket) => {
+      let loggedIn = false;
+      socket.on("LOGIN", async (login: string, password: string) => {
+        console.log({ login, password });
+        try {
+          const authData = await this.db
+            .collection("users")
+            .authWithPassword(login, password);
 
-            const UserList: SocketMessage = {
-                type: "UserList",
-                user: this.systemUser,
-                isBroadcast: false,
-                userList: Array.from(this.lobbies.get(ws.lobbyId)!.players.values()).map((uSock) => {
-                    return uSock.user;
-                })
-            }
+          const record = authData.record as UserRecord;
 
-            ws.send(JSON.stringify(UserList));
+          const user: User = {
+            username: record.username,
+            id: record.id,
+            avatar: record.avatar,
+            verified: record.verified,
+            created: record.created,
+            updated: record.updated,
+          };
+          loggedIn = true;
 
-
-            ws.on('message', (data: string) => {
-                const msg: SocketMessage = JSON.parse(data);
-                console.log(msg)
-                msg.user = ws.user;
-
-                switch(msg.type) {
-                    case "MSG":
-                        _this.broadcast(Array.from(this.lobbies.get(ws.lobbyId)!.players.values()), msg);
-                        console.log("MSG:", ws.user.name, msg.content);
-                        break;
-                    case "CHN":
-                        if(msg.content) ws.user.name = msg.content;
-                        _this.broadcast(Array.from(this.lobbies.get(ws.lobbyId)!.players.values()), 
-                            {
-                                type: "CHN",
-                                user: ws.user,
-                                isBroadcast: true
-                            }
-                        )
-                        break;
-                    case "PING":
-                        ws.send(JSON.stringify({
-                            "type": "PING",
-                            "ms": new Date().getTime(),
-                            "user": this.systemUser
-                        }));
-                        break;
-                }
-            })
-
-            ws.on('close', (code, reason) => {
-                console.log(`Socket(${ws.id}) closed with code ${code}. => Reason ${reason}`);
-                this.broadcast(Array.from(this.lobbies.get(ws.lobbyId)!.players.values()), {
-                    type: "UserLeave",
-                    user: ws.user,
-                    isBroadcast: true
-                });
-                
-                const lobby = this.lobbies.get(ws.lobbyId)!.players;
-                lobby.delete(ws.id);
-            })
-        })
-
-        server.listen(8080, () => {
-            console.log("WebSocketServer ready!")
-        })
-    }
-
-    broadcast(listOfSockets: UserSocket[], data: SocketMessage) {
-        for(const socket of listOfSockets) {
-            socket.send(JSON.stringify(data))
+          this.handleSocket(socket, user);
+        } catch (e) {
+          socket.emit("MESSAGE", "You suck!");
         }
+      });
+
+      socket.on("REGISTER", async ({ login, email, password }) => {
+        if (loggedIn) return;
+
+        console.log("UserRegister", { login, email, password });
+
+        const record = await this.db.collection("users").create({
+          username: login,
+          email,
+          password,
+          passwordConfirm: password,
+        });
+        if (record.id) {
+          console.log(record);
+          const user: User = {
+            username: record.username,
+            id: record.id,
+            avatar: record.avatar,
+            verified: record.verified,
+            created: record.created,
+            updated: record.updated,
+          };
+          loggedIn = true;
+
+          this.handleSocket(socket, user);
+        }
+      });
+    });
+
+    server.listen(8080, () => {
+      console.log("WebSocketServer ready!");
+    });
+  }
+
+  handleSocket(socket: Socket, user: User) {
+    // decide which lobby to put user in
+    // currently only test lobby exists
+    let lobby = this.lobbies.get("test");
+    if (!lobby) {
+      lobby = new Lobby("test", defaultLobbySettings);
+      this.lobbies.set("test", lobby);
     }
 
-    joinLobby(socket: WebSocket) {
+    socket.join("test");
 
-    }
+    const userSocket: UserSocket = {
+      socket,
+      user: user,
+      lobby,
+    };
+
+    // Tell connecting Client user details
+    socket.emit("LOGIN_SUCCESS", user);
+
+    lobby.joinPlayer(userSocket);
+
+    socket.on("PING", () => {
+      socket.emit("PING", new Date().getTime());
+    });
+
+    socket.on("disconnect", (reason) => {
+      const lobby = userSocket.lobby;
+      lobby.leavePlayer(userSocket, reason);
+    });
+  }
+
+  // joinLobby(socket: WebSocket) {
+
+  // }
 }

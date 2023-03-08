@@ -8,6 +8,10 @@ database/*
 #code
 .vscode/
 
+build/
+public/
+db_importer/
+
 ### Node ###
 # Logs
 logs
